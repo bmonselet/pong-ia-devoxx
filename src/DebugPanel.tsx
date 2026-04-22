@@ -8,6 +8,8 @@ interface BallParams {
     maxSpeedMultiplier: number;
     angleRangeMin: number;
     angleRangeMax: number;
+    spinInfluence: number;
+    spinDecay: number;
 }
 
 export const DebugPanel: React.FC = () => {
@@ -18,7 +20,9 @@ export const DebugPanel: React.FC = () => {
         accelerationFactor: 1.05,
         maxSpeedMultiplier: 2.0,
         angleRangeMin: -30,
-        angleRangeMax: 30
+        angleRangeMax: 30,
+        spinInfluence: 0.3,
+        spinDecay: 0.98
     });
 
     const handleSliderChange = (key: keyof BallParams, value: number) => {
@@ -34,7 +38,9 @@ export const DebugPanel: React.FC = () => {
             accelerationFactor: 1.05,
             maxSpeedMultiplier: 2.0,
             angleRangeMin: -30,
-            angleRangeMax: 30
+            angleRangeMax: 30,
+            spinInfluence: 0.3,
+            spinDecay: 0.98
         };
         setParams(defaultParams);
         EventBus.emit('update-ball-params', defaultParams);
@@ -118,6 +124,32 @@ export const DebugPanel: React.FC = () => {
                             max="90" 
                             value={params.angleRangeMax}
                             onChange={(e) => handleSliderChange('angleRangeMax', Number(e.target.value))}
+                        />
+                    </div>
+
+                    <h3>🌀 Paramètres Spin</h3>
+
+                    <div className="slider-group">
+                        <label>Spin Influence: {params.spinInfluence.toFixed(2)}</label>
+                        <input 
+                            type="range" 
+                            min="0" 
+                            max="1.0" 
+                            step="0.05"
+                            value={params.spinInfluence}
+                            onChange={(e) => handleSliderChange('spinInfluence', Number(e.target.value))}
+                        />
+                    </div>
+
+                    <div className="slider-group">
+                        <label>Spin Decay: {params.spinDecay.toFixed(2)}</label>
+                        <input 
+                            type="range" 
+                            min="0.90" 
+                            max="1.00" 
+                            step="0.01"
+                            value={params.spinDecay}
+                            onChange={(e) => handleSliderChange('spinDecay', Number(e.target.value))}
                         />
                     </div>
 
