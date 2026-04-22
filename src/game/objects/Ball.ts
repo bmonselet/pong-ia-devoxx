@@ -4,8 +4,8 @@ export class Ball {
     private vx: number; // vitesse X (px/s)
     private vy: number; // vitesse Y (px/s)
     private radius: number;
-    private maxSpeed: number = 400; // vitesse max (px/s)
-    private minSpeed: number = 150; // vitesse min (px/s)
+    private maxSpeed: number = 500; // vitesse max (px/s)
+    private minSpeed: number = 250; // vitesse min (px/s)
 
     constructor(x: number, y: number, radius: number = 5) {
         this.x = x;
@@ -60,13 +60,17 @@ export class Ball {
         // Vitesse aléatoire entre minSpeed et maxSpeed
         const speed = this.minSpeed + Math.random() * (this.maxSpeed - this.minSpeed);
 
-        // Direction aléatoire, garantissant un angle min de ±30°
-        // Pour éviter que la balle ne parte parallèlement au sol
-        let angle = Math.random() * 360;
+        // Direction aléatoire, évitant les angles verticaux (trop proches de 90° ou 270°)
+        // Plages autorisées: 0° à 60°, 300° à 360° (vers la droite) ou 120° à 240° (vers la gauche)
+        let angle: number;
+        const direction = Math.random() > 0.5 ? 1 : -1; // 1 = droite, -1 = gauche
 
-        // Assurer que l'angle n'est pas entre -30° et +30° (trop plat)
-        while (angle > -30 && angle < 30) {
-            angle = Math.random() * 360;
+        if (direction > 0) {
+            // Vers la droite: 0° à 60°
+            angle = Math.random() * 60;
+        } else {
+            // Vers la gauche: 120° à 240°
+            angle = 120 + Math.random() * 120;
         }
 
         const radians = (angle * Math.PI) / 180;
