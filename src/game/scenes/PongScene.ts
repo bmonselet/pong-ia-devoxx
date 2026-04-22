@@ -361,20 +361,20 @@ export class PongScene extends Scene {
         // Check scoring (ball exits left or right)
         if (this.ball.x - this.ball.radius < 0) {
             this.iaScore++;
-            this.resetBall();
             this.updateScore();
             if (this.iaScore >= this.winScore) {
                 this.showVictory(this.isMultiplayer ? 'Player 2' : 'IA');
-                return;
+            } else {
+                this.resetBall();
             }
         }
         if (this.ball.x + this.ball.radius > this.gameWidth) {
             this.joueurScore++;
-            this.resetBall();
             this.updateScore();
             if (this.joueurScore >= this.winScore) {
                 this.showVictory(this.isMultiplayer ? 'Player 1' : 'You');
-                return;
+            } else {
+                this.resetBall();
             }
         }
 
