@@ -1,104 +1,105 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
-import { MainMenu } from './game/scenes/MainMenu';
+import { EventBus } from './game/EventBus';
 
-function App()
-{
-    // The sprite can only be moved in the MainMenu Scene
-    const [canMoveSprite, setCanMoveSprite] = useState(true);
+type Difficulty = 'easy' | 'medium' | 'hard';
 
-    //  References to the PhaserGame component (game and scene are exposed)
+function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [spritePosition, setSpritePosition] = useState({ x: 0, y: 0 });
+    const [currentScene, setCurrentScene] = useState<Phaser.Scene | null>(null);
+    const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+    const [scores, setScores] = useState({ joueur: 0, ia: 0 });
 
-    const changeScene = () => {
+    const handleCurrentScene = (scene: Phaser.Scene) => {
+        setCurrentScene(scene);
+    };
 
-        if(phaserRef.current)
-        {     
-            const scene = phaserRef.current.scene as MainMenu;
-            
-            if (scene)
-            {
-                scene.changeScene();
-            }
+    useEffect(() => {
+        const onScoreUpdate = (data: { joueur: number; ia: number }) => {
+            setScores(data);
+        };
+
+        EventBus.on('score-update', onScoreUpdate);
+        return () => {
+            EventBus.removeListener('score-update', onScoreUpdate);
+        };
+    }, []);
+
+    const handleDifficultyChange = (newDifficulty: Difficulty) => {
+        setDifficulty(newDifficulty);
+        EventBus.emit('difficulty-changed', newDifficulty);
+        handleNewGame();
+    };
+
+    const handleNewGame = () => {
+        if (currentScene && typeof currentScene.events.emit === 'function') {
+            currentScene.events.emit('reset-game');
+            setScores({ joueur: 0, ia: 0 });
         }
-    }
-
-    const moveSprite = () => {
-
-        if(phaserRef.current)
-        {
-
-            const scene = phaserRef.current.scene as MainMenu;
-
-            if (scene && scene.scene.key === 'MainMenu')
-            {
-                // Get the update logo position
-                scene.moveLogo(({ x, y }) => {
-
-                    setSpritePosition({ x, y });
-
-                });
-            }
-        }
-
-    }
-
-    const addSprite = () => {
-
-        if (phaserRef.current)
-        {
-            const scene = phaserRef.current.scene;
-
-            if (scene)
-            {
-                // Add more stars
-                const x = Phaser.Math.Between(64, scene.scale.width - 64);
-                const y = Phaser.Math.Between(64, scene.scale.height - 64);
-    
-                //  `add.sprite` is a Phaser GameObjectFactory method and it returns a Sprite Game Object instance
-                const star = scene.add.sprite(x, y, 'star');
-    
-                //  ... which you can then act upon. Here we create a Phaser Tween to fade the star sprite in and out.
-                //  You could, of course, do this from within the Phaser Scene code, but this is just an example
-                //  showing that Phaser objects and systems can be acted upon from outside of Phaser itself.
-                scene.add.tween({
-                    targets: star,
-                    duration: 500 + Math.random() * 1000,
-                    alpha: 0,
-                    yoyo: true,
-                    repeat: -1
-                });
-            }
-        }
-    }
-
-    // Event emitted from the PhaserGame component
-    const currentScene = (scene: Phaser.Scene) => {
-
-        setCanMoveSprite(scene.scene.key !== 'MainMenu');
-        
-    }
+    };
 
     return (
-        <div id="app">
-            <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-            <div>
-                <div>
-                    <button className="button" onClick={changeScene}>Change Scene</button>
+        <div className="app-container">
+            <div className="game-container">
+                <PhaserGame ref={phaserRef} currentActiveScene={handleCurrentScene} />
+            </div>
+            <div className="ui-container">
+                <h1>Pong IA</h1>
+                
+                <div className="score-display">
+                    <div className="score-item player">
+                        <span className="score-label">You:</span>
+                        <span className="score-value">{scores.joueur}</span>
+                    </div>
+                    <div className="score-separator">|</div>
+                    <div className="score-item ai">
+                        <span className="score-label">IA:</span>
+                        <span className="score-value">{scores.ia}</span>
+                    </div>
                 </div>
-                <div>
-                    <button disabled={canMoveSprite} className="button" onClick={moveSprite}>Toggle Movement</button>
+
+                <div className="difficulty-selector">
+                    <p className="selector-label">Difficulty</p>
+                    <div className="button-group">
+                        <button
+                            className={`difficulty-btn ${difficulty === 'easy' ? 'active' : ''}`}
+                            onClick={() => handleDifficultyChange('easy')}
+                        >
+                            Easy
+                        </button>
+                        <button
+                            className={`difficulty-btn ${difficulty === 'medium' ? 'active' : ''}`}
+                            onClick={() => handleDifficultyChange('medium')}
+                        >
+                            Medium
+                        </button>
+                        <button
+                            className={`difficulty-btn ${difficulty === 'hard' ? 'active' : ''}`}
+                            onClick={() => handleDifficultyChange('hard')}
+                        >
+                            Hard
+                        </button>
+                    </div>
                 </div>
-                <div className="spritePosition">Sprite Position:
-                    <pre>{`{\n  x: ${spritePosition.x}\n  y: ${spritePosition.y}\n}`}</pre>
+
+                <div className="game-controls">
+                    <button className="button reset-btn" onClick={handleNewGame}>
+                        New Game
+                    </button>
                 </div>
-                <div>
-                    <button className="button" onClick={addSprite}>Add New Sprite</button>
+
+                <div className="instructions">
+                    <h3>How to Play</h3>
+                    <ul>
+                        <li><strong>Controls:</strong> Arrow Up / Down keys</li>
+                        <li><strong>Objective:</strong> Reach 11 points to win</li>
+                        <li><strong>Opponent:</strong> AI with adaptive difficulty</li>
+                        <li><strong>Rules:</strong> Bounce the ball back and forth</li>
+                    </ul>
                 </div>
             </div>
         </div>
-    )
+    );
 }
 
-export default App
+export default App;
