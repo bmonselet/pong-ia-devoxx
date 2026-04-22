@@ -1,9 +1,20 @@
 import { EventBus } from '../EventBus';
 import { Scene } from 'phaser';
 
+type DifficultyLevel = 'easy' | 'medium' | 'hard';
+
+/**
+ * PongScene: Main game scene for Pong
+ * 
+ * Controls:
+ * - ArrowUp: Move player paddle up
+ * - ArrowDown: Move player paddle down
+ */
 export class PongScene extends Scene {
     private joueurScore: number = 0;
     private iaScore: number = 0;
+    private difficulty: DifficultyLevel = 'medium';
+    private aiReactionDelay: number = 0;
 
     private ball: {
         x: number;
@@ -38,6 +49,11 @@ export class PongScene extends Scene {
     private paddleHeight: number = 100;
     private ballRadius: number = 5;
     private ballSpeed: number = 200;
+    private paddleSpeed: number = 300;
+
+    private keys: { [key: string]: boolean } = {};
+    private aiErrorMargin: number = 40;
+    private aiMissRate: number = 0.10;
 
     constructor() {
         super({ key: 'PongScene' });
@@ -97,16 +113,73 @@ export class PongScene extends Scene {
             align: 'center',
         }).setOrigin(0.5);
 
+        // Setup keyboard controls
+        this.input.keyboard.on('keydown', (event: KeyboardEvent) => {
+            this.keys[event.key] = true;
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                event.preventDefault();
+            }
+        });
+
+        this.input.keyboard.on('keyup', (event: KeyboardEvent) => {
+            this.keys[event.key] = false;
+        });
+
+        // Listen for difficulty changes from React
+        EventBus.on('difficulty-changed', (newDifficulty: DifficultyLevel) => {
+            this.setDifficulty(newDifficulty);
+        });
+
+        // Listen for reset-game events from React
+        this.events.on('reset-game', () => {
+            this.resetGame();
+        });
+
         // Draw initial game elements
         this.drawPaddles();
         this.drawBall();
+
+        // Initialize difficulty
+        this.setDifficulty(this.difficulty);
 
         // Emit ready event
         EventBus.emit('current-scene-ready', this);
     }
 
+    private setDifficulty(difficulty: DifficultyLevel) {
+        this.difficulty = difficulty;
+        const config = {
+            easy: { reactionDelay: 400, errorMargin: 80, missRate: 0.30 },
+            medium: { reactionDelay: 150, errorMargin: 40, missRate: 0.10 },
+            hard: { reactionDelay: 25, errorMargin: 10, missRate: 0.05 },
+        };
+        const settings = config[difficulty];
+        this.aiReactionDelay = settings.reactionDelay;
+        this.aiErrorMargin = settings.errorMargin;
+        this.aiMissRate = settings.missRate;
+    }
+
+    private resetGame() {
+        this.joueurScore = 0;
+        this.iaScore = 0;
+        this.resetBall();
+        this.updateScore();
+    }
+
     update(time: number, delta: number) {
         const deltaSeconds = delta / 1000;
+
+        // Handle keyboard input for player paddle
+        if (this.keys['ArrowUp']) {
+            const newY = this.joueurPaddle.y - this.paddleSpeed * deltaSeconds;
+            this.joueurPaddle.y = Math.max(10, newY);
+        } else if (this.keys['ArrowDown']) {
+            const newY = this.joueurPaddle.y + this.paddleSpeed * deltaSeconds;
+            this.joueurPaddle.y = Math.min(this.gameHeight - 10 - this.paddleHeight, newY);
+        }
+
+        // AI paddle control
+        this.updateAIPaddle(time, deltaSeconds);
 
         // Update ball position
         this.ball.x += this.ball.vx * deltaSeconds;
@@ -143,6 +216,37 @@ export class PongScene extends Scene {
         // Redraw game elements
         this.drawPaddles();
         this.drawBall();
+    }
+
+    private updateAIPaddle(time: number, deltaSeconds: number) {
+        // Simple AI with reaction time and error margin
+        if (!this.aiReactionDelay) {
+            this.setDifficulty(this.difficulty);
+        }
+
+        // Check if AI should miss (based on miss rate)
+        if (Math.random() < this.aiMissRate) {
+            // Don't move - intentional miss
+            return;
+        }
+
+        // Calculate target position with error margin
+        let targetY = this.ball.y - this.paddleHeight / 2;
+        targetY += (Math.random() - 0.5) * 2 * this.aiErrorMargin;
+        targetY = Math.max(10, Math.min(this.gameHeight - 10 - this.paddleHeight, targetY));
+
+        // Move AI paddle towards target
+        const aiCenter = this.iaPaddle.y + this.paddleHeight / 2;
+        const threshold = 5;
+
+        if (aiCenter < targetY - threshold) {
+            this.iaPaddle.y += this.paddleSpeed * deltaSeconds;
+        } else if (aiCenter > targetY + threshold) {
+            this.iaPaddle.y -= this.paddleSpeed * deltaSeconds;
+        }
+
+        // Clamp paddle position
+        this.iaPaddle.y = Math.max(10, Math.min(this.gameHeight - 10 - this.paddleHeight, this.iaPaddle.y));
     }
 
     private checkPaddleCollision(paddle: any) {

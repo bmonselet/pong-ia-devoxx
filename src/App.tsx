@@ -20,10 +20,16 @@ function App() {
         };
 
         EventBus.on('score-update', onScoreUpdate);
+
+        // Emit initial difficulty when component mounts
+        if (currentScene) {
+            EventBus.emit('difficulty-changed', difficulty);
+        }
+
         return () => {
             EventBus.removeListener('score-update', onScoreUpdate);
         };
-    }, []);
+    }, [difficulty, currentScene]);
 
     const handleDifficultyChange = (newDifficulty: Difficulty) => {
         setDifficulty(newDifficulty);
