@@ -16,6 +16,8 @@ export class PongScene extends Scene {
     private difficulty: DifficultyLevel = 'medium';
     private aiReactionDelay: number = 0;
     private isMultiplayer: boolean = false;
+    private angleRangeMin: number = -30;
+    private angleRangeMax: number = 30;
 
     private ball: {
         x: number;
@@ -142,6 +144,13 @@ export class PongScene extends Scene {
         EventBus.on('toggle-multiplayer', (enable: boolean) => {
             this.isMultiplayer = enable;
             this.resetGame();
+        });
+
+        // Listen for ball params updates from debug panel
+        EventBus.on('update-ball-params', (params: any) => {
+            this.ballSpeed = params.minSpeed;
+            this.angleRangeMin = params.angleRangeMin;
+            this.angleRangeMax = params.angleRangeMax;
         });
 
         // Draw initial game elements
@@ -316,9 +325,21 @@ export class PongScene extends Scene {
         this.ball.x = this.gameWidth / 2;
         this.ball.y = this.gameHeight / 2;
 
-        const angle = Math.random() * Math.PI * 2;
-        this.ball.vx = Math.cos(angle) * this.ballSpeed;
-        this.ball.vy = Math.sin(angle) * this.ballSpeed;
+        // Use angle ranges from debug panel
+        let angle: number;
+        const direction = Math.random() > 0.5 ? 1 : -1; // 1 = right, -1 = left
+
+        if (direction > 0) {
+            // Towards right: use angleRangeMin to angleRangeMax
+            angle = this.angleRangeMin + Math.random() * (this.angleRangeMax - this.angleRangeMin);
+        } else {
+            // Towards left: mirror the angles (180 - angle)
+            angle = 180 - (this.angleRangeMin + Math.random() * (this.angleRangeMax - this.angleRangeMin));
+        }
+
+        const radians = (angle * Math.PI) / 180;
+        this.ball.vx = Math.cos(radians) * this.ballSpeed;
+        this.ball.vy = Math.sin(radians) * this.ballSpeed;
     }
 
     private updateScore() {

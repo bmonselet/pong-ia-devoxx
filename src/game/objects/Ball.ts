@@ -39,10 +39,42 @@ export class Ball {
         return this.currentSpeedMultiplier;
     }
 
+    getMinSpeed(): number {
+        return this.minSpeed;
+    }
+
+    getMaxSpeed(): number {
+        return this.maxSpeed;
+    }
+
+    getAccelerationFactor(): number {
+        return this.accelerationFactor;
+    }
+
+    getMaxSpeedMultiplier(): number {
+        return this.maxSpeedMultiplier;
+    }
+
     // Setters
     setVelocity(vx: number, vy: number): void {
         this.vx = vx;
         this.vy = vy;
+    }
+
+    setMinSpeed(speed: number): void {
+        this.minSpeed = speed;
+    }
+
+    setMaxSpeed(speed: number): void {
+        this.maxSpeed = speed;
+    }
+
+    setAccelerationFactor(factor: number): void {
+        this.accelerationFactor = factor;
+    }
+
+    setMaxSpeedMultiplier(multiplier: number): void {
+        this.maxSpeedMultiplier = multiplier;
     }
 
     /**

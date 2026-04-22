@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
+import { DebugPanel } from './DebugPanel';
 import { EventBus } from './game/EventBus';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -56,6 +57,7 @@ function App() {
             <div className="game-container">
                 <PhaserGame ref={phaserRef} currentActiveScene={handleCurrentScene} />
             </div>
+            <DebugPanel />
             <div className="ui-container">
                 <h1>Pong IA</h1>
                 
