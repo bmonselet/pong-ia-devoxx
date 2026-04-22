@@ -18,7 +18,7 @@ const phasermsg = () => {
 }
 
 export default defineConfig({
-    base: './',
+    base: '/pong-ia-devoxx/',
     plugins: [
         react(),
         phasermsg()
