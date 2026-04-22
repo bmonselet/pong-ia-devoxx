@@ -104,6 +104,45 @@ body {
     gap: 10px;
 }
 
+/* Mode Selector */
+.mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    background-color: rgba(14, 195, 201, 0.1);
+    border: 1px solid rgba(14, 195, 201, 0.5);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.checkbox-container:hover {
+    background-color: rgba(14, 195, 201, 0.15);
+    border-color: #0ec3c9;
+}
+
+.checkbox-container input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #0ec3c9;
+}
+
+.checkbox-label {
+    font-size: 0.9em;
+    color: rgba(255, 255, 255, 0.87);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+}
+
 .selector-label {
     font-size: 0.9em;
     color: rgba(255, 255, 255, 0.7);

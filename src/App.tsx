@@ -9,6 +9,7 @@ function App() {
     const [currentScene, setCurrentScene] = useState<Phaser.Scene | null>(null);
     const [difficulty, setDifficulty] = useState<Difficulty>('medium');
     const [scores, setScores] = useState({ joueur: 0, ia: 0 });
+    const [isMultiplayer, setIsMultiplayer] = useState<boolean>(false);
 
     const handleCurrentScene = (scene: Phaser.Scene) => {
         setCurrentScene(scene);
@@ -44,6 +45,12 @@ function App() {
         }
     };
 
+    const handleToggleMultiplayer = () => {
+        setIsMultiplayer(!isMultiplayer);
+        EventBus.emit('toggle-multiplayer', !isMultiplayer);
+        handleNewGame();
+    };
+
     return (
         <div className="app-container">
             <div className="game-container">
@@ -54,39 +61,52 @@ function App() {
                 
                 <div className="score-display">
                     <div className="score-item player">
-                        <span className="score-label">You:</span>
+                        <span className="score-label">{isMultiplayer ? 'P1' : 'You'}:</span>
                         <span className="score-value">{scores.joueur}</span>
                     </div>
                     <div className="score-separator">|</div>
                     <div className="score-item ai">
-                        <span className="score-label">IA:</span>
+                        <span className="score-label">{isMultiplayer ? 'P2' : 'IA'}:</span>
                         <span className="score-value">{scores.ia}</span>
                     </div>
                 </div>
 
-                <div className="difficulty-selector">
-                    <p className="selector-label">Difficulty</p>
-                    <div className="button-group">
-                        <button
-                            className={`difficulty-btn ${difficulty === 'easy' ? 'active' : ''}`}
-                            onClick={() => handleDifficultyChange('easy')}
-                        >
-                            Easy
-                        </button>
-                        <button
-                            className={`difficulty-btn ${difficulty === 'medium' ? 'active' : ''}`}
-                            onClick={() => handleDifficultyChange('medium')}
-                        >
-                            Medium
-                        </button>
-                        <button
-                            className={`difficulty-btn ${difficulty === 'hard' ? 'active' : ''}`}
-                            onClick={() => handleDifficultyChange('hard')}
-                        >
-                            Hard
-                        </button>
-                    </div>
+                <div className="mode-selector">
+                    <label className="checkbox-container">
+                        <input
+                            type="checkbox"
+                            checked={isMultiplayer}
+                            onChange={handleToggleMultiplayer}
+                        />
+                        <span className="checkbox-label">Multiplayer Mode</span>
+                    </label>
                 </div>
+
+                {!isMultiplayer && (
+                    <div className="difficulty-selector">
+                        <p className="selector-label">Difficulty</p>
+                        <div className="button-group">
+                            <button
+                                className={`difficulty-btn ${difficulty === 'easy' ? 'active' : ''}`}
+                                onClick={() => handleDifficultyChange('easy')}
+                            >
+                                Easy
+                            </button>
+                            <button
+                                className={`difficulty-btn ${difficulty === 'medium' ? 'active' : ''}`}
+                                onClick={() => handleDifficultyChange('medium')}
+                            >
+                                Medium
+                            </button>
+                            <button
+                                className={`difficulty-btn ${difficulty === 'hard' ? 'active' : ''}`}
+                                onClick={() => handleDifficultyChange('hard')}
+                            >
+                                Hard
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div className="game-controls">
                     <button className="button reset-btn" onClick={handleNewGame}>
@@ -97,10 +117,21 @@ function App() {
                 <div className="instructions">
                     <h3>How to Play</h3>
                     <ul>
-                        <li><strong>Controls:</strong> Arrow Up / Down keys</li>
-                        <li><strong>Objective:</strong> Reach 11 points to win</li>
-                        <li><strong>Opponent:</strong> AI with adaptive difficulty</li>
-                        <li><strong>Rules:</strong> Bounce the ball back and forth</li>
+                        {isMultiplayer ? (
+                            <>
+                                <li><strong>Player 1 (Left):</strong> Arrow Up / Down keys</li>
+                                <li><strong>Player 2 (Right):</strong> Z (up) / S (down) keys</li>
+                                <li><strong>Objective:</strong> Reach 11 points to win</li>
+                                <li><strong>Rules:</strong> Bounce the ball back and forth</li>
+                            </>
+                        ) : (
+                            <>
+                                <li><strong>Controls:</strong> Arrow Up / Down keys</li>
+                                <li><strong>Objective:</strong> Reach 11 points to win</li>
+                                <li><strong>Opponent:</strong> AI with adaptive difficulty</li>
+                                <li><strong>Rules:</strong> Bounce the ball back and forth</li>
+                            </>
+                        )}
                     </ul>
                 </div>
             </div>

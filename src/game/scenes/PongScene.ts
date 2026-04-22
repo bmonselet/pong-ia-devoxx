@@ -15,6 +15,7 @@ export class PongScene extends Scene {
     private iaScore: number = 0;
     private difficulty: DifficultyLevel = 'medium';
     private aiReactionDelay: number = 0;
+    private isMultiplayer: boolean = false;
 
     private ball: {
         x: number;
@@ -54,6 +55,7 @@ export class PongScene extends Scene {
     private keys: { [key: string]: boolean } = {};
     private aiErrorMargin: number = 40;
     private aiMissRate: number = 0.10;
+    private aiController: { update: (time: number, deltaSeconds: number) => void } | null = null;
 
     constructor() {
         super({ key: 'PongScene' });
@@ -115,14 +117,15 @@ export class PongScene extends Scene {
 
         // Setup keyboard controls
         this.input.keyboard.on('keydown', (event: KeyboardEvent) => {
-            this.keys[event.key] = true;
-            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            const key = event.key.toLowerCase();
+            this.keys[key] = true;
+            if (['arrowup', 'arrowdown', 's', 'z'].includes(key)) {
                 event.preventDefault();
             }
         });
 
         this.input.keyboard.on('keyup', (event: KeyboardEvent) => {
-            this.keys[event.key] = false;
+            this.keys[event.key.toLowerCase()] = false;
         });
 
         // Listen for difficulty changes from React
@@ -135,12 +138,23 @@ export class PongScene extends Scene {
             this.resetGame();
         });
 
+        // Listen for multiplayer mode toggle
+        EventBus.on('toggle-multiplayer', (enable: boolean) => {
+            this.isMultiplayer = enable;
+            this.resetGame();
+        });
+
         // Draw initial game elements
         this.drawPaddles();
         this.drawBall();
 
         // Initialize difficulty
         this.setDifficulty(this.difficulty);
+
+        // Initialize AI controller
+        this.aiController = {
+            update: this.updateAIPaddle.bind(this),
+        };
 
         // Emit ready event
         EventBus.emit('current-scene-ready', this);
@@ -169,17 +183,28 @@ export class PongScene extends Scene {
     update(time: number, delta: number) {
         const deltaSeconds = delta / 1000;
 
-        // Handle keyboard input for player paddle
-        if (this.keys['ArrowUp']) {
+        // Handle keyboard input for player 1 (left paddle)
+        if (this.keys['arrowup']) {
             const newY = this.joueurPaddle.y - this.paddleSpeed * deltaSeconds;
             this.joueurPaddle.y = Math.max(10, newY);
-        } else if (this.keys['ArrowDown']) {
+        } else if (this.keys['arrowdown']) {
             const newY = this.joueurPaddle.y + this.paddleSpeed * deltaSeconds;
             this.joueurPaddle.y = Math.min(this.gameHeight - 10 - this.paddleHeight, newY);
         }
 
-        // AI paddle control
-        this.updateAIPaddle(time, deltaSeconds);
+        // Handle right paddle: AI or Player 2 (multiplayer)
+        if (this.isMultiplayer) {
+            if (this.keys['z']) {
+                const newY = this.iaPaddle.y - this.paddleSpeed * deltaSeconds;
+                this.iaPaddle.y = Math.max(10, newY);
+            } else if (this.keys['s']) {
+                const newY = this.iaPaddle.y + this.paddleSpeed * deltaSeconds;
+                this.iaPaddle.y = Math.min(this.gameHeight - 10 - this.paddleHeight, newY);
+            }
+        } else {
+            // AI paddle control
+            this.updateAIPaddle(time, deltaSeconds);
+        }
 
         // Update ball position
         this.ball.x += this.ball.vx * deltaSeconds;
@@ -197,13 +222,13 @@ export class PongScene extends Scene {
 
         // Check scoring (ball exits left or right)
         if (this.ball.x - this.ball.radius < 0) {
-            // IA scores
+            // Right player (IA or Player 2) scores
             this.iaScore++;
             this.resetBall();
             this.updateScore();
         }
         if (this.ball.x + this.ball.radius > this.gameWidth) {
-            // Joueur scores
+            // Left player scores
             this.joueurScore++;
             this.resetBall();
             this.updateScore();
@@ -349,5 +374,9 @@ export class PongScene extends Scene {
             joueur: this.joueurScore,
             ia: this.iaScore,
         };
+    }
+
+    public getIsMultiplayer() {
+        return this.isMultiplayer;
     }
 }
