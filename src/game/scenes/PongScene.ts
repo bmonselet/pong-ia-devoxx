@@ -58,7 +58,7 @@ export class PongScene extends Scene {
     private paddleWidth: number = 10;
     private paddleHeight: number = 100;
     private ballRadius: number = 5;
-    private ballSpeed: number = 200;
+    private ballSpeed: number = 450;
     private paddleSpeed: number = 300;
 
     private keys: { [key: string]: boolean } = {};
@@ -281,15 +281,34 @@ export class PongScene extends Scene {
         this.ballRotation += this.ballSpin * deltaSeconds;
 
         // Bounce off top and bottom walls
+        // Redirect ball more horizontally to avoid vertical ping-pong
         if (this.ball.y - this.ball.radius < 10) {
             this.ball.y = 10 + this.ball.radius;
             this.ball.vy = -this.ball.vy;
             this.ballSpin *= -0.5;
+            // Force more horizontal trajectory: reduce vy, boost vx
+            const speed = Math.sqrt(this.ball.vx * this.ball.vx + this.ball.vy * this.ball.vy);
+            const maxVyRatio = 0.5; // vy can be at most 50% of total speed
+            if (Math.abs(this.ball.vy) > speed * maxVyRatio) {
+                const sign = this.ball.vy > 0 ? 1 : -1;
+                this.ball.vy = sign * speed * maxVyRatio;
+                const vxSign = this.ball.vx !== 0 ? Math.sign(this.ball.vx) : (Math.random() > 0.5 ? 1 : -1);
+                this.ball.vx = vxSign * Math.sqrt(speed * speed - this.ball.vy * this.ball.vy);
+            }
         }
         if (this.ball.y + this.ball.radius > this.gameHeight - 10) {
             this.ball.y = this.gameHeight - 10 - this.ball.radius;
             this.ball.vy = -this.ball.vy;
             this.ballSpin *= -0.5;
+            // Force more horizontal trajectory: reduce vy, boost vx
+            const speed = Math.sqrt(this.ball.vx * this.ball.vx + this.ball.vy * this.ball.vy);
+            const maxVyRatio = 0.5; // vy can be at most 50% of total speed
+            if (Math.abs(this.ball.vy) > speed * maxVyRatio) {
+                const sign = this.ball.vy > 0 ? 1 : -1;
+                this.ball.vy = sign * speed * maxVyRatio;
+                const vxSign = this.ball.vx !== 0 ? Math.sign(this.ball.vx) : (Math.random() > 0.5 ? 1 : -1);
+                this.ball.vx = vxSign * Math.sqrt(speed * speed - this.ball.vy * this.ball.vy);
+            }
         }
 
         // Check scoring (ball exits left or right)
