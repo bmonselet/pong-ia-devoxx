@@ -62,6 +62,10 @@ export class PongScene extends Scene {
     private paddleSpeed: number = 300;
 
     private keys: { [key: string]: boolean } = {};
+    private gameOver: boolean = false;
+    private winScore: number = 11;
+    private victoryText: Phaser.GameObjects.Text | null = null;
+    private restartText: Phaser.GameObjects.Text | null = null;
     private aiErrorMargin: number = 40;
     private aiMissRate: number = 0.10;
     private aiController: { update: (time: number, deltaSeconds: number) => void } | null = null;
@@ -224,8 +228,10 @@ export class PongScene extends Scene {
     private resetGame() {
         this.joueurScore = 0;
         this.iaScore = 0;
+        this.gameOver = false;
         this.resetBall();
         this.updateScore();
+        this.hideVictory();
 
         // Reset power-ups
         this.powerUps = [];
@@ -239,7 +245,48 @@ export class PongScene extends Scene {
         this.clearPowerUpLabels();
     }
 
+    private showVictory(winner: string) {
+        this.gameOver = true;
+        this.ball.vx = 0;
+        this.ball.vy = 0;
+
+        this.victoryText = this.add.text(this.gameWidth / 2, this.gameHeight / 2 - 40, `🏆 ${winner} wins!`, {
+            fontFamily: 'Arial',
+            fontSize: '48',
+            color: '#00ff00',
+            align: 'center',
+            stroke: '#000000',
+            strokeThickness: 4,
+        }).setOrigin(0.5);
+
+        this.restartText = this.add.text(this.gameWidth / 2, this.gameHeight / 2 + 30, 'Press SPACE or click New Game to restart', {
+            fontFamily: 'Arial',
+            fontSize: '18',
+            color: '#ffffff',
+            align: 'center',
+        }).setOrigin(0.5);
+
+        // Listen for SPACE to restart
+        this.input.keyboard.once('keydown-SPACE', () => {
+            this.resetGame();
+        });
+
+        EventBus.emit('game-over', { winner, scores: { joueur: this.joueurScore, ia: this.iaScore } });
+    }
+
+    private hideVictory() {
+        if (this.victoryText) {
+            this.victoryText.destroy();
+            this.victoryText = null;
+        }
+        if (this.restartText) {
+            this.restartText.destroy();
+            this.restartText = null;
+        }
+    }
+
     update(time: number, delta: number) {
+        if (this.gameOver) return;
         const deltaSeconds = delta / 1000;
 
         // Handle keyboard input for player 1 (left paddle)
@@ -313,16 +360,22 @@ export class PongScene extends Scene {
 
         // Check scoring (ball exits left or right)
         if (this.ball.x - this.ball.radius < 0) {
-            // Right player (IA or Player 2) scores
             this.iaScore++;
             this.resetBall();
             this.updateScore();
+            if (this.iaScore >= this.winScore) {
+                this.showVictory(this.isMultiplayer ? 'Player 2' : 'IA');
+                return;
+            }
         }
         if (this.ball.x + this.ball.radius > this.gameWidth) {
-            // Left player scores
             this.joueurScore++;
             this.resetBall();
             this.updateScore();
+            if (this.joueurScore >= this.winScore) {
+                this.showVictory(this.isMultiplayer ? 'Player 1' : 'You');
+                return;
+            }
         }
 
         // Basic paddle-ball collision detection
