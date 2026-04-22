@@ -19,6 +19,13 @@ export class PongScene extends Scene {
     private angleRangeMin: number = -30;
     private angleRangeMax: number = 30;
 
+    // Spin properties
+    private ballSpin: number = 0;
+    private ballRotation: number = 0;
+    private spinDecay: number = 0.98;
+    private maxSpin: number = 15;
+    private spinInfluence: number = 0.3;
+
     private ball: {
         x: number;
         y: number;
@@ -59,6 +66,32 @@ export class PongScene extends Scene {
     private aiMissRate: number = 0.10;
     private aiController: { update: (time: number, deltaSeconds: number) => void } | null = null;
 
+    // Power-ups
+    private powerUps: Array<{
+        x: number;
+        y: number;
+        type: 'speed' | 'slow' | 'bigPaddle' | 'smallPaddle' | 'multiBall';
+        color: number;
+        radius: number;
+        active: boolean;
+    }> = [];
+    private powerUpGraphics: Phaser.GameObjects.Graphics;
+    private powerUpTimer: number = 0;
+    private powerUpSpawnInterval: number = 5000;
+    private activePowerUps: Array<{
+        type: string;
+        expiresAt: number;
+        target?: 'joueur' | 'ia';
+    }> = [];
+    private extraBalls: Array<{
+        x: number; y: number; vx: number; vy: number; radius: number;
+    }> = [];
+    private extraBallGraphics: Phaser.GameObjects.Graphics;
+    private defaultPaddleHeight: number;
+    private defaultBallSpeed: number;
+    private lastPaddleHit: 'joueur' | 'ia' = 'joueur';
+    private powerUpLabelGraphics: Phaser.GameObjects.Text[] = [];
+
     constructor() {
         super({ key: 'PongScene' });
     }
@@ -96,6 +129,10 @@ export class PongScene extends Scene {
         this.joueurGraphics = this.add.graphics();
         this.iaGraphics = this.add.graphics();
         this.ballGraphics = this.add.graphics();
+        this.powerUpGraphics = this.add.graphics();
+        this.extraBallGraphics = this.add.graphics();
+        this.defaultPaddleHeight = this.paddleHeight;
+        this.defaultBallSpeed = this.ballSpeed;
 
         // Draw border lines (top and bottom)
         const borderGraphics = this.add.graphics();
@@ -151,6 +188,8 @@ export class PongScene extends Scene {
             this.ballSpeed = params.minSpeed;
             this.angleRangeMin = params.angleRangeMin;
             this.angleRangeMax = params.angleRangeMax;
+            if (params.spinInfluence !== undefined) this.spinInfluence = params.spinInfluence;
+            if (params.spinDecay !== undefined) this.spinDecay = params.spinDecay;
         });
 
         // Draw initial game elements
@@ -187,6 +226,17 @@ export class PongScene extends Scene {
         this.iaScore = 0;
         this.resetBall();
         this.updateScore();
+
+        // Reset power-ups
+        this.powerUps = [];
+        this.activePowerUps = [];
+        this.extraBalls = [];
+        this.powerUpTimer = 0;
+        this.ballSpeed = this.defaultBallSpeed;
+        this.paddleHeight = this.defaultPaddleHeight;
+        this.joueurPaddle.height = this.defaultPaddleHeight;
+        this.iaPaddle.height = this.defaultPaddleHeight;
+        this.clearPowerUpLabels();
     }
 
     update(time: number, delta: number) {
@@ -219,14 +269,27 @@ export class PongScene extends Scene {
         this.ball.x += this.ball.vx * deltaSeconds;
         this.ball.y += this.ball.vy * deltaSeconds;
 
+        // Apply spin curve effect on trajectory
+        if (Math.abs(this.ballSpin) > 0.1) {
+            this.ball.vy += this.ballSpin * this.spinInfluence * deltaSeconds * 60;
+        }
+
+        // Spin decay
+        this.ballSpin *= this.spinDecay;
+
+        // Update visual rotation
+        this.ballRotation += this.ballSpin * deltaSeconds;
+
         // Bounce off top and bottom walls
         if (this.ball.y - this.ball.radius < 10) {
             this.ball.y = 10 + this.ball.radius;
             this.ball.vy = -this.ball.vy;
+            this.ballSpin *= -0.5;
         }
         if (this.ball.y + this.ball.radius > this.gameHeight - 10) {
             this.ball.y = this.gameHeight - 10 - this.ball.radius;
             this.ball.vy = -this.ball.vy;
+            this.ballSpin *= -0.5;
         }
 
         // Check scoring (ball exits left or right)
@@ -247,9 +310,27 @@ export class PongScene extends Scene {
         this.checkPaddleCollision(this.joueurPaddle);
         this.checkPaddleCollision(this.iaPaddle);
 
+        // Spawn power-ups periodically
+        this.powerUpTimer += delta;
+        if (this.powerUpTimer >= this.powerUpSpawnInterval && this.powerUps.length < 3) {
+            this.spawnPowerUp();
+            this.powerUpTimer = 0;
+        }
+
+        // Check ball-powerup collisions
+        this.checkPowerUpCollisions();
+
+        // Update extra balls (multi-ball)
+        this.updateExtraBalls(deltaSeconds);
+
+        // Check expired power-ups
+        this.checkExpiredPowerUps(time);
+
         // Redraw game elements
         this.drawPaddles();
         this.drawBall();
+        this.drawPowerUps(time);
+        this.drawExtraBalls();
     }
 
     private updateAIPaddle(time: number, deltaSeconds: number) {
@@ -306,10 +387,12 @@ export class PongScene extends Scene {
                 // Ball coming from left, hitting right paddle
                 this.ball.vx = -this.ball.vx;
                 this.ball.x = paddleLeft - this.ball.radius;
+                this.lastPaddleHit = 'ia';
             } else if (this.ball.vx < 0 && paddle === this.joueurPaddle) {
                 // Ball coming from right, hitting left paddle
                 this.ball.vx = -this.ball.vx;
                 this.ball.x = paddleRight + this.ball.radius;
+                this.lastPaddleHit = 'joueur';
             }
 
             // Add some vertical spin based on where ball hit paddle
@@ -317,6 +400,24 @@ export class PongScene extends Scene {
             const relativeIntersectY = paddleCenterY - this.ball.y;
             const bounceAngle = (relativeIntersectY / (paddle.height / 2)) * 0.3; // Max 30 degrees
             this.ball.vy += bounceAngle * Math.abs(this.ball.vx) * 0.5;
+
+            // Calculate spin based on impact position
+            const relativeHit = (this.ball.y - paddle.y) / paddle.height; // 0 (top) to 1 (bottom)
+            const spinFromPosition = (relativeHit - 0.5) * 2; // -1 to +1
+
+            // Calculate spin based on paddle movement
+            let paddleVelocity = 0;
+            if (paddle === this.joueurPaddle) {
+                if (this.keys['arrowup']) paddleVelocity = -1;
+                if (this.keys['arrowdown']) paddleVelocity = 1;
+            } else if (this.isMultiplayer) {
+                if (this.keys['z']) paddleVelocity = -1;
+                if (this.keys['s']) paddleVelocity = 1;
+            }
+
+            // Combine both factors
+            this.ballSpin = (spinFromPosition * 5 + paddleVelocity * 8);
+            this.ballSpin = Math.max(-this.maxSpin, Math.min(this.maxSpin, this.ballSpin));
         }
     }
 
@@ -324,6 +425,8 @@ export class PongScene extends Scene {
         // Reset ball to center with random direction
         this.ball.x = this.gameWidth / 2;
         this.ball.y = this.gameHeight / 2;
+        this.ballSpin = 0;
+        this.ballRotation = 0;
 
         // Use angle ranges from debug panel
         let angle: number;
@@ -374,8 +477,250 @@ export class PongScene extends Scene {
 
     private drawBall() {
         this.ballGraphics.clear();
+
+        const spinIntensity = Math.min(Math.abs(this.ballSpin) / this.maxSpin, 1);
+
+        // Main circle
         this.ballGraphics.fillStyle(0xffffff, 1);
         this.ballGraphics.fillCircle(this.ball.x, this.ball.y, this.ball.radius);
+
+        // Spin indicator (rotating line)
+        if (Math.abs(this.ballSpin) > 0.5) {
+            const lineLength = this.ball.radius * 0.8;
+            const endX = this.ball.x + Math.cos(this.ballRotation) * lineLength;
+            const endY = this.ball.y + Math.sin(this.ballRotation) * lineLength;
+            const spinColor = this.ballSpin > 0 ? 0xff6600 : 0x0066ff;
+            this.ballGraphics.lineStyle(2, spinColor, spinIntensity);
+            this.ballGraphics.lineBetween(this.ball.x, this.ball.y, endX, endY);
+        }
+
+        // Trail effect
+        const trailLength = 3;
+        for (let i = 1; i <= trailLength; i++) {
+            const trailX = this.ball.x - this.ball.vx * 0.01 * i;
+            const trailY = this.ball.y - this.ball.vy * 0.01 * i;
+            const alpha = 0.3 - (i * 0.1);
+            if (alpha > 0) {
+                this.ballGraphics.fillStyle(0xffffff, alpha);
+                this.ballGraphics.fillCircle(trailX, trailY, this.ball.radius * (1 - i * 0.2));
+            }
+        }
+    }
+
+    // ===================== Power-Up System =====================
+
+    private spawnPowerUp() {
+        const types = ['speed', 'slow', 'bigPaddle', 'smallPaddle', 'multiBall'] as const;
+        const colors: Record<string, number> = {
+            speed: 0xff0000, slow: 0x00ff00, bigPaddle: 0x0088ff,
+            smallPaddle: 0xffff00, multiBall: 0xff00ff,
+        };
+        const type = types[Math.floor(Math.random() * types.length)];
+
+        this.powerUps.push({
+            x: 200 + Math.random() * 400,
+            y: 50 + Math.random() * 500,
+            type,
+            color: colors[type],
+            radius: 12,
+            active: true,
+        });
+    }
+
+    private checkPowerUpCollisions() {
+        const checkBallAgainstPowerUps = (bx: number, by: number, br: number) => {
+            for (let i = this.powerUps.length - 1; i >= 0; i--) {
+                const pu = this.powerUps[i];
+                if (!pu.active) continue;
+                const dx = bx - pu.x;
+                const dy = by - pu.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < br + pu.radius) {
+                    this.activatePowerUp(pu.type);
+                    this.powerUps.splice(i, 1);
+                }
+            }
+        };
+
+        checkBallAgainstPowerUps(this.ball.x, this.ball.y, this.ball.radius);
+        for (const eb of this.extraBalls) {
+            checkBallAgainstPowerUps(eb.x, eb.y, eb.radius);
+        }
+    }
+
+    private activatePowerUp(type: 'speed' | 'slow' | 'bigPaddle' | 'smallPaddle' | 'multiBall') {
+        const now = this.time.now;
+        const labels: Record<string, string> = {
+            speed: '🔴 Speed Boost!', slow: '🟢 Slow Motion!',
+            bigPaddle: '🔵 Big Paddle!', smallPaddle: '🟡 Small Paddle!',
+            multiBall: '🟣 Multi Ball!',
+        };
+
+        switch (type) {
+            case 'speed': {
+                this.ball.vx *= 1.5;
+                this.ball.vy *= 1.5;
+                this.activePowerUps.push({ type, expiresAt: now + 5000 });
+                break;
+            }
+            case 'slow': {
+                this.ball.vx *= 0.5;
+                this.ball.vy *= 0.5;
+                this.activePowerUps.push({ type, expiresAt: now + 5000 });
+                break;
+            }
+            case 'bigPaddle': {
+                const target = this.lastPaddleHit;
+                const paddle = target === 'joueur' ? this.joueurPaddle : this.iaPaddle;
+                paddle.height = this.defaultPaddleHeight * 1.5;
+                this.activePowerUps.push({ type, expiresAt: now + 8000, target });
+                break;
+            }
+            case 'smallPaddle': {
+                const target: 'joueur' | 'ia' = this.lastPaddleHit === 'joueur' ? 'ia' : 'joueur';
+                const paddle = target === 'joueur' ? this.joueurPaddle : this.iaPaddle;
+                paddle.height = this.defaultPaddleHeight * 0.5;
+                this.activePowerUps.push({ type, expiresAt: now + 8000, target });
+                break;
+            }
+            case 'multiBall': {
+                const angle = (Math.random() - 0.5) * Math.PI;
+                this.extraBalls.push({
+                    x: this.ball.x, y: this.ball.y,
+                    vx: Math.cos(angle) * this.ballSpeed,
+                    vy: Math.sin(angle) * this.ballSpeed,
+                    radius: this.ballRadius,
+                });
+                this.activePowerUps.push({ type, expiresAt: now + 5000 });
+                break;
+            }
+        }
+
+        EventBus.emit('powerup-activated', { type, duration: type === 'bigPaddle' || type === 'smallPaddle' ? 8000 : 5000 });
+
+        // Floating label
+        const label = this.add.text(this.gameWidth / 2, 70, labels[type], {
+            fontFamily: 'Arial', fontSize: '18', color: '#ffffff', align: 'center',
+        }).setOrigin(0.5).setAlpha(1);
+        this.powerUpLabelGraphics.push(label);
+        this.tweens.add({
+            targets: label, alpha: 0, y: 55, duration: 1500,
+            onComplete: () => {
+                label.destroy();
+                const idx = this.powerUpLabelGraphics.indexOf(label);
+                if (idx !== -1) this.powerUpLabelGraphics.splice(idx, 1);
+            },
+        });
+    }
+
+    private checkExpiredPowerUps(time: number) {
+        for (let i = this.activePowerUps.length - 1; i >= 0; i--) {
+            const pu = this.activePowerUps[i];
+            if (time < pu.expiresAt) continue;
+
+            switch (pu.type) {
+                case 'speed':
+                case 'slow': {
+                    const currentSpeed = Math.sqrt(this.ball.vx * this.ball.vx + this.ball.vy * this.ball.vy);
+                    if (currentSpeed > 0) {
+                        const scale = this.defaultBallSpeed / currentSpeed;
+                        this.ball.vx *= scale;
+                        this.ball.vy *= scale;
+                    }
+                    break;
+                }
+                case 'bigPaddle':
+                case 'smallPaddle': {
+                    if (pu.target) {
+                        const paddle = pu.target === 'joueur' ? this.joueurPaddle : this.iaPaddle;
+                        paddle.height = this.defaultPaddleHeight;
+                    }
+                    break;
+                }
+                case 'multiBall': {
+                    this.extraBalls = [];
+                    break;
+                }
+            }
+            this.activePowerUps.splice(i, 1);
+        }
+    }
+
+    private updateExtraBalls(deltaSeconds: number) {
+        for (let i = this.extraBalls.length - 1; i >= 0; i--) {
+            const eb = this.extraBalls[i];
+            eb.x += eb.vx * deltaSeconds;
+            eb.y += eb.vy * deltaSeconds;
+
+            if (eb.y - eb.radius < 10) { eb.y = 10 + eb.radius; eb.vy = -eb.vy; }
+            if (eb.y + eb.radius > this.gameHeight - 10) { eb.y = this.gameHeight - 10 - eb.radius; eb.vy = -eb.vy; }
+
+            if (eb.x - eb.radius < 0 || eb.x + eb.radius > this.gameWidth) {
+                this.extraBalls.splice(i, 1);
+                continue;
+            }
+
+            this.checkExtraBallPaddleCollision(eb, this.joueurPaddle);
+            this.checkExtraBallPaddleCollision(eb, this.iaPaddle);
+        }
+    }
+
+    private checkExtraBallPaddleCollision(
+        eb: { x: number; y: number; vx: number; vy: number; radius: number },
+        paddle: { x: number; y: number; width: number; height: number }
+    ) {
+        if (
+            eb.x + eb.radius > paddle.x &&
+            eb.x - eb.radius < paddle.x + paddle.width &&
+            eb.y + eb.radius > paddle.y &&
+            eb.y - eb.radius < paddle.y + paddle.height
+        ) {
+            if (eb.vx > 0 && paddle === this.iaPaddle) {
+                eb.vx = -eb.vx;
+                eb.x = paddle.x - eb.radius;
+            } else if (eb.vx < 0 && paddle === this.joueurPaddle) {
+                eb.vx = -eb.vx;
+                eb.x = paddle.x + paddle.width + eb.radius;
+            }
+        }
+    }
+
+    private drawPowerUps(time: number) {
+        this.powerUpGraphics.clear();
+        const pulse = 0.8 + Math.sin(time * 0.005) * 0.2;
+
+        for (const pu of this.powerUps) {
+            if (!pu.active) continue;
+            const r = pu.radius * pulse;
+
+            // Outer glow
+            this.powerUpGraphics.fillStyle(pu.color, 0.25);
+            this.powerUpGraphics.fillCircle(pu.x, pu.y, r + 4);
+            // Main circle
+            this.powerUpGraphics.fillStyle(pu.color, 0.9);
+            this.powerUpGraphics.fillCircle(pu.x, pu.y, r);
+            // Inner bright core
+            this.powerUpGraphics.fillStyle(0xffffff, 0.5);
+            this.powerUpGraphics.fillCircle(pu.x, pu.y, r * 0.4);
+            // Border ring
+            this.powerUpGraphics.lineStyle(1.5, 0xffffff, 0.8);
+            this.powerUpGraphics.strokeCircle(pu.x, pu.y, r);
+        }
+    }
+
+    private drawExtraBalls() {
+        this.extraBallGraphics.clear();
+        this.extraBallGraphics.fillStyle(0xff00ff, 0.9);
+        for (const eb of this.extraBalls) {
+            this.extraBallGraphics.fillCircle(eb.x, eb.y, eb.radius);
+        }
+    }
+
+    private clearPowerUpLabels() {
+        for (const label of this.powerUpLabelGraphics) {
+            label.destroy();
+        }
+        this.powerUpLabelGraphics = [];
     }
 
     public getJoueurPaddle() {
