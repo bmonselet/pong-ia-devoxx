@@ -6,6 +6,9 @@ export class Ball {
     private radius: number;
     private maxSpeed: number = 700; // vitesse max (px/s)
     private minSpeed: number = 450; // vitesse min (px/s)
+    private accelerationFactor: number = 1.05; // +5% à chaque rebond
+    private maxSpeedMultiplier: number = 2.0; // Pallier: 2x la vitesse max initiale
+    private currentSpeedMultiplier: number = 1.0; // Multiplicateur actuel
 
     constructor(x: number, y: number, radius: number = 5) {
         this.x = x;
@@ -30,6 +33,10 @@ export class Ball {
 
     getVelocity(): { vx: number; vy: number } {
         return { vx: this.vx, vy: this.vy };
+    }
+
+    getSpeedMultiplier(): number {
+        return this.currentSpeedMultiplier;
     }
 
     // Setters
@@ -76,6 +83,9 @@ export class Ball {
         const radians = (angle * Math.PI) / 180;
         this.vx = Math.cos(radians) * speed;
         this.vy = Math.sin(radians) * speed;
+
+        // Réinitialiser le multiplicateur de vitesse
+        this.currentSpeedMultiplier = 1.0;
     }
 
     /**
@@ -87,12 +97,14 @@ export class Ball {
         if (this.y - this.radius <= 0) {
             this.y = this.radius;
             this.vy = Math.abs(this.vy);
+            this.accelerate();
         }
 
         // Rebond sur le mur du haut
         if (this.y + this.radius >= gameHeight) {
             this.y = gameHeight - this.radius;
             this.vy = -Math.abs(this.vy);
+            this.accelerate();
         }
     }
 
@@ -138,6 +150,9 @@ export class Ball {
         } else {
             this.x = paddleX - this.radius - 2;
         }
+
+        // Accélérer après le rebond
+        this.accelerate();
     }
 
     /**
@@ -146,6 +161,33 @@ export class Ball {
      */
     isOutOfBounds(gameWidth: number): boolean {
         return this.x < 0 || this.x > gameWidth;
+    }
+
+    /**
+     * Accélérer la balle progressivement jusqu'à un pallier maximal
+     * L'accélération est appliquée à chaque rebond (raquette/mur)
+     */
+    private accelerate(): void {
+        // Augmenter le multiplicateur de vitesse de 5%
+        this.currentSpeedMultiplier = Math.min(
+            this.currentSpeedMultiplier * this.accelerationFactor,
+            this.maxSpeedMultiplier
+        );
+
+        // Calculer la vitesse actuelle
+        const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+
+        // Appliquer le multiplicateur à la vitesse
+        if (currentSpeed > 0) {
+            const newSpeed = Math.max(
+                this.minSpeed,
+                Math.min(this.maxSpeed * this.currentSpeedMultiplier, currentSpeed * this.accelerationFactor)
+            );
+
+            // Normaliser et appliquer la nouvelle vitesse
+            this.vx = (this.vx / currentSpeed) * newSpeed;
+            this.vy = (this.vy / currentSpeed) * newSpeed;
+        }
     }
 
     /**
